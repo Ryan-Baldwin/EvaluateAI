@@ -1,0 +1,172 @@
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "fullTextIndex"]
+}
+
+datasource db {
+  provider = "mysql"
+  url = env("DATABASE_URL")
+  relationMode = "prisma"
+}
+
+model Session {
+  id              String    @id @default(uuid())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  name            String
+  userId          String
+
+  response        Response[] @relation("SessionToResponse")
+  prompt          Prompt[] @relation("SessionToPrompt")
+  criteria        Criterion[] @relation("SessionToCriterion")
+  evaluations     Evaluation[] @relation("SessionToEvaluation")
+}
+
+model Prompt {
+  id              String       @id @default(uuid())
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  userMessage     String       @db.Text  // Updated to TEXT
+  systemMessage   String       @db.Text  // Updated to TEXT
+  sessionId       String?      // Nullable
+  session         Session?     @relation("SessionToPrompt", fields: [sessionId], references: [id])
+  userId          String?      // Nullable
+  responses       Response[]   @relation("PromptToResponse")
+  evaluations     Evaluation[] @relation("PromptToEvaluation")
+
+  @@fulltext([userMessage])
+  @@index([sessionId])
+  @@index([userId])
+}
+
+model Response {
+  id                 String       @id @default(uuid())
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  sessionId          String?      // Nullable
+  session            Session?     @relation("SessionToResponse", fields: [sessionId], references: [id])
+  promptId           String
+  prompt             Prompt       @relation("PromptToResponse", fields: [promptId], references: [id])
+  content            String       @db.Text  // Already set to TEXT, no change needed
+  model              String?      // Nullable
+  temperature        Float?       // Nullable
+  top_p              Float?       // Nullable
+  stop               String?      // Nullable
+  max_tokens         Int?         // Nullable
+  presence_penalty   Float?       // Nullable
+  frequency_penalty  Float?       // Nullable
+  evaluations        Evaluation[] @relation("ResponseToEvaluation")
+
+  @@index([sessionId])
+  @@index([promptId])
+}
+
+model Evaluation {
+  id          String   @id @default(uuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  sessionId   String
+  session     Session  @relation("SessionToEvaluation", fields: [sessionId], references: [id])
+
+  promptId    String?
+  prompt      Prompt?   @relation("PromptToEvaluation", fields: [promptId], references: [id])
+  
+  responseId  String?
+  response    Response? @relation("ResponseToEvaluation", fields: [responseId], references: [id])
+
+  criteria    EvaluationCriteria[]
+
+  @@index([responseId])
+  @@index([sessionId])
+  @@index([promptId])
+}
+
+model Criterion {
+  id              String   @id @default(uuid())
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  name            String
+  instructions    String
+  patterns        Pattern[] // One-to-many relation to Pattern
+  examples        String
+  score           Int
+
+  sessionId       String
+  session         Session  @relation("SessionToCriterion", fields: [sessionId], references: [id])
+  
+  evaluations     EvaluationCriteria[]
+  
+  @@index([sessionId])
+}
+
+
+enum Role {
+  user
+  system
+  assistant
+}
+
+model Message {
+  id              String   @id @default(uuid())
+  
+  role            Role   
+  content         String   @db.Text
+  temperature     Int
+  top_p           Int
+  stop            String
+  max_tokens      Int
+  presence_penalty Int
+  frequency_penalty Int
+}
+
+
+
+model Category {
+  id            String    @id @default(uuid())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  name          String
+  description   String
+  
+  patterns      Pattern[] // One-to-many relation to Pattern
+}
+
+model Pattern {
+  id            String    @id @default(uuid())
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  name          String    // Name of the pattern
+  text          String    // The actual pattern for text extraction
+  
+  categoryId    String    // Foreign Key for Category
+  category      Category  @relation(fields: [categoryId], references: [id])
+  
+  criterionId   String    // Foreign Key for Criterion
+  criterion     Criterion @relation(fields: [criterionId], references: [id])
+
+  @@index([categoryId, criterionId])
+}
+
+
+model EvaluationCriteria {
+  evaluation  Evaluation @relation(fields: [evaluationId], references: [id])
+  evaluationId String
+  criterion    Criterion @relation(fields: [criterionId], references: [id])
+  criterionId  String
+  @@id([evaluationId, criterionId])
+}
+
+model AIModel {
+  id            String    @id @default(uuid())
+  name          String
+  type          String
+
+  manufacturer  String
+  description   String
+  max_tokens    Int
+
+}
